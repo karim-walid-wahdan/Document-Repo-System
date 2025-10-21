@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRES_MINUTES: int = 60
+    JWT_REFRESH_EXPIRES_MINUTES: int = 60 * 24 * 7  # 10080
 
     # ----- Cache / Redis -----
     REDIS_URL: str

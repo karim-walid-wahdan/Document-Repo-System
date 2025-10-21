@@ -6,7 +6,7 @@ from sqlalchemy import String, Integer, Text, Boolean, ForeignKey, DateTime, Sma
 from sqlalchemy import Index
 from sqlalchemy import ForeignKey, ForeignKeyConstraint, BigInteger
 from enum import Enum as PyEnum
-
+from sqlalchemy.dialects.postgresql import INET
 class Base(DeclarativeBase):
     pass
 
@@ -89,7 +89,7 @@ class ActionLog(Base):
 
     log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     action_type: Mapped[str] = mapped_column(String(30), nullable=False)
-    ip: Mapped[str] = mapped_column(String(64), nullable=False)  # INET in PG; string here is fine
+    ip: Mapped[str] = mapped_column(INET, nullable = False)
     time_stamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
     user_id: Mapped[int] = mapped_column(ForeignKey("app_user.user_id"), nullable=False)
@@ -105,3 +105,7 @@ class ActionLog(Base):
             name="fk_actionlog_docver",
         ),
     )
+class DepartmentRole(Base):
+    __tablename__ = "department_role"
+    department_id: Mapped[int] = mapped_column(ForeignKey("department.department_id", ondelete="CASCADE"), primary_key=True)
+    role_id: Mapped[int] = mapped_column(ForeignKey("role.role_id", ondelete="CASCADE"), primary_key=True)

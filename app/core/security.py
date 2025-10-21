@@ -6,7 +6,6 @@ from passlib.context import CryptContext
 from app.core.settings import settings
 
 logger = logging.getLogger("app.security")
-
 pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
 
 def _pw_fingerprint(plain: str) -> str:
@@ -25,16 +24,23 @@ def verify_password(plain: str, hashed: str) -> bool:
         logger.exception("Verify failed for fp=%s", _pw_fingerprint(plain))
         return False
 
+def _create_token(subject: str, *, minutes: int, typ: str) -> tuple[str, str, int]:
+    exp = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    jti = uuid.uuid4().hex
+    payload = {"sub": subject, "exp": int(exp.timestamp()), "jti": jti, "typ": typ}
+    token = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    return token, jti, minutes * 60
+
 def create_access_token(subject: str, *, minutes: int | None = None) -> tuple[str, str, int]:
     exp_minutes = minutes or settings.JWT_EXPIRES_MINUTES
-    exp = datetime.now(timezone.utc) + timedelta(minutes=exp_minutes)
-    jti = uuid.uuid4().hex
-    payload = {"sub": subject, "exp": int(exp.timestamp()), "jti": jti}
-    token = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
-    return token, jti, exp_minutes * 60
+    return _create_token(subject, minutes=exp_minutes, typ="access")
+
+def create_refresh_token(subject: str, *, minutes: int | None = None) -> tuple[str, str, int]:
+    exp_minutes = minutes or settings.JWT_REFRESH_EXPIRES_MINUTES
+    return _create_token(subject, minutes=exp_minutes, typ="refresh")
 
 def decode_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except JWTError as e:
-        raise ValueError(f"Invalid token: {e}")  # let dependency map to 401
+        raise ValueError(f"Invalid token: {e}")
