@@ -1,0 +1,21 @@
+# core libs
+fastapi
+uvicorn[standard]
+
+# pydantic v2 + email extra
+pydantic[email]>=2,<3
+pydantic-settings>=2,<3
+
+# auth hashing: versions that work together
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
+# db, cache, etc.
+SQLAlchemy>=2.0
+asyncpg
+alembic
+python-jose[cryptography]
+redis>=5
+boto3
+httpx
+python-multipart
