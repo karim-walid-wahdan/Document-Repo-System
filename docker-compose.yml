@@ -28,9 +28,14 @@ services:
       - db
   redis:
     image: redis:7
-    restart: unless-stopped
     ports:
-      - "6379:6379"
+    - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
 
   minio:
     image: minio/minio:latest
@@ -38,11 +43,17 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    ports: ["9000:9000", "9001:9001"]
     volumes:
       - minio-data:/data
+    healthcheck:
+      # If your image doesn't have curl, swap this line for the wget version below.
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      # Alternative (if curl missing):
+      # test: ["CMD-SHELL", "wget -qO- http://localhost:9000/minio/health/ready >/dev/null 2>&1 || exit 1"]
 
   createbucket:
     image: minio/mc:latest
@@ -61,9 +72,9 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
     env_file: .env
     ports:
       - "8000:8000"
