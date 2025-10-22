@@ -1,4 +1,4 @@
-# app/routers/auth.py
+#app/routers/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, Field

@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS tag (
   name VARCHAR(50) NOT NULL UNIQUE,
   tag_deleted BOOLEAN DEFAULT false
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tag_name_ci ON tag (lower(name));
 
 CREATE TABLE IF NOT EXISTS document_tag (
   doc_id INT NOT NULL REFERENCES document(doc_id) ON DELETE CASCADE,
@@ -98,7 +99,6 @@ CREATE TABLE IF NOT EXISTS document_tag (
 -- Speed filters by tag, and joins from tag -> documents
 CREATE INDEX IF NOT EXISTS idx_document_tag_tag ON document_tag(tag_id);
 CREATE INDEX IF NOT EXISTS idx_document_tag_doc ON document_tag(doc_id);
-
 -- ============================================================================
 -- Versions
 -- ============================================================================

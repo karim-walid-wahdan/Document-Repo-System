@@ -1,4 +1,4 @@
-# app/routers/departments.py
+#app/routers/departments.py
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field

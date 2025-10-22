@@ -1,9 +1,10 @@
-# app/routers/documents.py
+#app/routers/documents.py
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated, Optional, List
+
 
 import redis.asyncio as redis
 from fastapi import (
@@ -16,9 +17,9 @@ from fastapi import (
     Query,
     Request,
     status,
+    Body
 )
-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, IPvAnyAddress
 from sqlalchemy import (
     and_,
     delete,
@@ -68,6 +69,8 @@ _LEVEL_TO_NUM = {PermLevel.owner: 2, PermLevel.edit: 4, PermLevel.view: 8}
 
 
 # ---------------------------- Schemas ----------------------------
+class DocTagIn(BaseModel):
+    tag_id: int
 
 class DocumentOut(BaseModel):
     doc_id: int
@@ -95,7 +98,7 @@ class SearchOut(BaseModel):
 class ActionLogOut(BaseModel):
     log_id: int
     action_type: str
-    ip: str
+    ip: IPvAnyAddress
     time_stamp: datetime
     user_id: int
     doc_id: int
@@ -143,7 +146,7 @@ async def _next_version_no(session: AsyncSession, doc_id: int) -> int:
             DocumentVersion.doc_id == doc_id
         )
     )
-    return int(q.scalar_one()) + 1
+    return int(q.scalar_one())  
 
 
 async def _log_action(
@@ -274,7 +277,7 @@ async def create_document(
     brand_new = False
     if doc:
         # new version of existing doc
-        vno = await _next_version_no(session, doc.doc_id)
+        vno = await _next_version_no(session, doc.doc_id) + 1
         # refresh metadata (optional)
         doc.description = description or doc.description
         doc.visibility = visibility or doc.visibility
@@ -425,7 +428,7 @@ async def add_version(
         )
 
     now = datetime.now(timezone.utc)
-    vno = await _next_version_no(session, doc_id)
+    vno = await _next_version_no(session, doc_id) +1
     key = f"docs/{doc_id}/v{vno}/{filename}"
 
     data = await file.read()
@@ -491,8 +494,6 @@ async def add_version(
         pass
 
     return out
-
-
 @router.get("", response_model=list[SearchOut])
 async def search_documents(
     q: Optional[str] = Query(None, description="Search in title"),
@@ -501,8 +502,7 @@ async def search_documents(
     limit: int = 25,
     offset: int = 0,
     user: AppUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
+    session: AsyncSession = Depends(get_session)):
     """
     Search ONLY documents the caller can access:
       - public or internal, OR
@@ -597,14 +597,24 @@ async def search_documents(
             )
         )
     return results
-
-
 @router.get("/{doc_id}/versions", response_model=list[VersionOut])
 async def version_history(
     doc_id: int,
     user: AppUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    # must be viewable by the caller (mirror get_document_details logic)
+    doc = await session.get(Document, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    level = await session.scalar(
+        select(DocAccess.access_level).where(
+            and_(DocAccess.doc_id == doc_id, DocAccess.department_id == user.department_id)
+        )
+    )
+    can_view = (doc.visibility != DocVisibility.restricted) or (level is not None)
+    if not can_view:
+        raise HTTPException(status_code=403, detail="Not permitted for your department")
     stmt = (
         select(DocumentVersion)
         .where(DocumentVersion.doc_id == doc_id)
@@ -626,8 +636,6 @@ async def version_history(
         )
         for v in rows
     ]
-
-
 @router.get("/{doc_id}/download")
 async def download(
     doc_id: int,
@@ -699,10 +707,7 @@ async def download(
     await r.zincrby("hot:docs", 1, str(doc_id))
 
     return {"url": url}
-
-
 # ---------------------------- Audit read APIs ----------------------------
-
 @router.get("/{doc_id}/actions", response_model=List[ActionLogOut])
 async def list_doc_actions(
     doc_id: int,
@@ -732,8 +737,6 @@ async def list_doc_actions(
         )
         for a in rows
     ]
-
-
 @router.get("/actions", response_model=List[ActionLogOut])
 async def list_actions(
     user_id: Optional[int] = Query(None),
@@ -772,10 +775,7 @@ async def list_actions(
         )
         for a in rows
     ]
-
-
 # ---------------------------- Metadata update / delete ----------------------------
-
 @router.patch("/{doc_id}", response_model=DocumentOut)
 async def update_document_metadata(
     doc_id: int,
@@ -847,8 +847,6 @@ async def update_document_metadata(
         visibility=doc.visibility,
         updated_at=doc.updated_at,
     )
-
-
 @router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     doc_id: int,
@@ -882,10 +880,7 @@ async def delete_document(
     except Exception:
         pass
     return
-
-
 # ---------------------------- Details (with perms summary) ----------------------------
-
 @router.get("/{doc_id}", response_model=DocumentDetailsOut)
 async def get_document_details(
     doc_id: int,
@@ -953,10 +948,7 @@ async def get_document_details(
             access_level=level,
         ),
     )
-
-
 # ---------------------------- Permissions management ----------------------------
-
 @router.get("/{doc_id}/permissions", response_model=list[PermissionOut])
 async def list_permissions(
     doc_id: int,
@@ -987,8 +979,6 @@ async def list_permissions(
         PermissionOut(department_id=int(dep_id), level=_num_to_level(int(lvl)))
         for dep_id, lvl in rows
     ]
-
-
 @router.put("/{doc_id}/permissions/departments/{department_id}", response_model=PermissionOut)
 async def upsert_permission(
     doc_id: int,
@@ -1022,8 +1012,6 @@ async def upsert_permission(
 
     await session.commit()
     return PermissionOut(department_id=department_id, level=payload.level)
-
-
 @router.delete("/{doc_id}/permissions/departments/{department_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_permission(
     doc_id: int,
@@ -1043,8 +1031,6 @@ async def delete_permission(
     )
     await session.commit()
     return
-
-
 @router.put("/{doc_id}/permissions", response_model=list[PermissionOut])
 async def replace_permissions(
     doc_id: int,
@@ -1078,8 +1064,6 @@ async def replace_permissions(
 
     out = [PermissionOut(department_id=d, level=l) for d, l in sorted(dedup.items())]
     return out
-
-
 # ---------------------------- (Optional) per-version audit log ----------------------------
 
 @router.get("/{doc_id}/versions/{version_no}/audit-log", response_model=List[ActionLogOut])
@@ -1121,3 +1105,93 @@ async def version_audit_log(
         )
         for a in rows
     ]
+@router.put("/{doc_id}/tags", status_code=status.HTTP_204_NO_CONTENT)
+async def add_tag_to_document(
+    doc_id: int,
+    payload: DocTagIn = Body(...),
+    session: AsyncSession = Depends(get_session),
+    user: AppUser = Depends(get_current_user),
+    request: Request = None,
+):
+    doc = await session.get(Document, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    # require at least edit permission
+    await _require_edit(session, doc_id=doc_id, user=user)
+
+    # tag must exist
+    t = await session.get(Tag, payload.tag_id)
+    if not t:
+        raise HTTPException(status_code=400, detail="Invalid tag_id")
+
+    exists = await session.scalar(
+        select(DocumentTag).where(
+            DocumentTag.doc_id == doc_id, DocumentTag.tag_id == payload.tag_id
+        )
+    )
+    if not exists:
+        session.add(DocumentTag(doc_id=doc_id, tag_id=payload.tag_id))
+        doc.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+
+        # audit (best-effort) tied to latest version
+        latest_v = await session.scalar(
+            select(DocumentVersion.version_no).where(
+                DocumentVersion.doc_id == doc_id,
+                DocumentVersion.is_latest == True,  # noqa: E712
+            )
+        )
+        if latest_v is not None:
+            try:
+                await _log_action(
+                    session,
+                    user_id=user.user_id,
+                    doc_id=doc_id,
+                    version_no=int(latest_v),
+                    action_type="tag_add",
+                    ip=str(request.client.host if request and request.client else "unknown"),
+                )
+            except Exception:
+                pass
+    return
+
+@router.delete("/{doc_id}/tags", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_tag_from_document(
+    doc_id: int,
+    payload: DocTagIn = Body(...),
+    session: AsyncSession = Depends(get_session),
+    user: AppUser = Depends(get_current_user),
+    request: Request = None,
+):
+    doc = await session.get(Document, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    await _require_edit(session, doc_id=doc_id, user=user)
+
+    await session.execute(
+        delete(DocumentTag).where(
+            DocumentTag.doc_id == doc_id, DocumentTag.tag_id == payload.tag_id
+        )
+    )
+    doc.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+
+    latest_v = await session.scalar(
+        select(DocumentVersion.version_no).where(
+            DocumentVersion.doc_id == doc_id,
+            DocumentVersion.is_latest == True,  # noqa: E712
+        )
+    )
+    if latest_v is not None:
+        try:
+            await _log_action(
+                session,
+                user_id=user.user_id,
+                doc_id=doc_id,
+                version_no=int(latest_v),
+                action_type="tag_remove",
+                ip=str(request.client.host if request and request.client else "unknown"),
+            )
+        except Exception:
+            pass
+    return
