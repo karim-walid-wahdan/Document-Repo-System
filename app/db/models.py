@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, relationship
 from sqlalchemy import String, Integer, Text, Boolean, ForeignKey, DateTime, SmallInteger, Enum, BigInteger, UniqueConstraint
-from sqlalchemy import Index
+from sqlalchemy import Index , text
 from sqlalchemy import ForeignKey, ForeignKeyConstraint, BigInteger
 from enum import Enum as PyEnum
 from sqlalchemy.dialects.postgresql import INET
@@ -67,6 +67,13 @@ class Tag(Base):
     tag_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
 
+    # keep the Python name you like (deleted or tag_deleted), but map to the DB column
+    deleted: Mapped[bool] = mapped_column(
+        "tag_deleted",        # <-- actual column name in the DB
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+    )
 class DocumentTag(Base):
     __tablename__ = "document_tag"
     doc_id: Mapped[int] = mapped_column(ForeignKey("document.doc_id", ondelete="CASCADE"), primary_key=True)

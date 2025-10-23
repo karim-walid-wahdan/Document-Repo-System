@@ -1,4 +1,5 @@
 # app/main.py
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import JSONResponse
@@ -48,3 +49,10 @@ async def starlette_http_exception_handler(request, exc: StarletteHTTPException)
             content={"detail": "Bad multipart/form-data", "cid": cid},
         )
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173","http://localhost:3000","*"],  # tighten in prod
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

@@ -14,7 +14,6 @@ def _pw_fingerprint(plain: str) -> str:
 
 def hash_password(plain: str) -> str:
     hashed = pwd_context.hash(plain)
-    logger.info("Hashed password fp=%s scheme=%s", _pw_fingerprint(plain), pwd_context.identify(hashed))
     return hashed
 
 def verify_password(plain: str, hashed: str) -> bool:

@@ -34,7 +34,7 @@ async def list_departments(
     limit: int = 100,
     offset: int = 0,
     session: AsyncSession = Depends(get_session),
-    _: AppUser = Depends(get_current_user),
+    #_: AppUser = Depends(get_current_user),
 ):
     rows = (
         await session.execute(
@@ -139,7 +139,7 @@ class RoleOut(BaseModel):
 async def list_department_roles(
     department_id: int,
     session: AsyncSession = Depends(get_session),
-    _: AppUser = Depends(get_current_user),
+    #_: AppUser = Depends(get_current_user),
 ):
     # ensure department exists
     if not await session.get(Department, department_id):
