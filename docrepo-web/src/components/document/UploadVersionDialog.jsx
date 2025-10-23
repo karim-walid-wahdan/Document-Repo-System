@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
-import { Dialog, DialogTitle, DialogContent, DialogActions, Stack, Button, Chip, LinearProgress, Alert } from "@mui/material";
+import React, { useEffect, useState } from "react";
+import {
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Stack, Button, LinearProgress, Chip, Alert
+} from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
@@ -7,9 +10,7 @@ import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 
 function prettyBytes(n) {
   if (!n && n !== 0) return "";
-  const u = ["B", "KB", "MB", "GB"]; let i = 0, v = n || 0;
-  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-  return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
+  const u = ["B","KB","MB","GB"]; let i=0,v=n||0; while(v>=1024&&i<u.length-1){v/=1024;i++;} return `${v.toFixed(v<10&&i>0?1:0)} ${u[i]}`;
 }
 
 export default function UploadVersionDialog({ open, onClose, onUpload }) {
@@ -29,7 +30,7 @@ export default function UploadVersionDialog({ open, onClose, onUpload }) {
       await onUpload(file, setProgress);
       onClose();
     } catch (e) {
-      setError(e?.response?.data?.detail || "Failed to upload.");
+      setError(e?.message || "Failed to upload.");
     } finally { setBusy(false); }
   }
 

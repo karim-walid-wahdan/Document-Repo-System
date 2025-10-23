@@ -32,7 +32,6 @@ function SearchBar({ onSearch, busy }) {
   const [tagOptions, setTagOptions] = useState([]);
   const [tags, setTags] = useState([]);
   const [uploaderText, setUploaderText] = useState("");
-  const navigate = useNavigate();
   // track whether the tags dropdown is open; we won't submit on Enter if open
   const [tagsOpen, setTagsOpen] = useState(false);
 
@@ -40,15 +39,19 @@ function SearchBar({ onSearch, busy }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const data = await searchTags(tagInput, 20);
-      if (alive) setTagOptions(data);
+      try {
+        const data = await searchTags(tagInput, 20);
+        if (alive) setTagOptions(data || []);
+      } catch {
+        if (alive) setTagOptions([]);
+      }
     })();
     return () => { alive = false; };
   }, [tagInput]);
 
   async function run() {
     const uploaderId = await resolveUploaderId(uploaderText);
-    onSearch({ q, tags: tags.map(t => t.name), uploaderId });
+    onSearch({ q, tags: tags.map((t) => t.name), uploaderId });
   }
 
   return (
@@ -64,8 +67,7 @@ function SearchBar({ onSearch, busy }) {
       // Global Enter handler: works for Title, Tags (when menu closed), and Uploader
       onKeyDown={(e) => {
         if (e.key === "Enter") {
-          // if the tags popup is open, let Autocomplete handle selection
-          if (tagsOpen) return;
+          if (tagsOpen) return;    // don't submit while the tags popup is open
           e.preventDefault();
           run();
         }
@@ -220,7 +222,7 @@ function ActionsCell({ doc, onChanged }) {
           <IconButton onClick={doAddVersion} size="small" disabled={!canEdit}><AddIcon /></IconButton>
         </span>
       </Tooltip>
-      <Tooltip title={canEdit ? "Edit metadata" : "No edit access"}>
+      <Tooltip title={canEdit ? "Edit metadata (open details to edit)" : "No edit access"}>
         <span>
           <IconButton size="small" disabled={!canEdit}><EditIcon /></IconButton>
         </span>
@@ -241,6 +243,8 @@ function ActionsCell({ doc, onChanged }) {
 
 /* ------------------------------- Page ------------------------------- */
 export default function Search() {
+  const navigate = useNavigate(); // for clicking titles → /documents/:id
+
   const [rows, setRows] = useState([]);
   const [busy, setBusy] = useState(false);
   const [lastQuery, setLastQuery] = useState({});
@@ -293,13 +297,13 @@ export default function Search() {
                     {visibilityChip(r.doc.visibility)}
                     <Box>
                       <Typography
-  variant="subtitle1"
-  fontWeight={800}
-  sx={{ color: "primary.main", cursor: "pointer", textDecoration: "underline" }}
-  onClick={() => navigate(`/documents/${r.doc.doc_id}`)}
->
-  {r.doc.title}
-</Typography>
+                        variant="subtitle1"
+                        fontWeight={800}
+                        sx={{ color: "primary.main", cursor: "pointer", textDecoration: "underline" }}
+                        onClick={() => navigate(`/documents/${r.doc.doc_id}`)}
+                      >
+                        {r.doc.title}
+                      </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         {r.doc.description}
                       </Typography>

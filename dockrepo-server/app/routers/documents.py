@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated, Optional, List
-
+from urllib.parse import urlparse, urlunparse
 
 import redis.asyncio as redis
 from fastapi import (
@@ -87,7 +87,7 @@ class VersionOut(BaseModel):
     uploaded_at: datetime
     uploaded_by: int
     is_latest: bool
-
+    uploaded_by_email: Optional[str] = None   # <— NEW
 
 class SearchOut(BaseModel):
     doc: DocumentOut
@@ -607,6 +607,7 @@ async def version_history(
     doc = await session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+
     level = await session.scalar(
         select(DocAccess.access_level).where(
             and_(DocAccess.doc_id == doc_id, DocAccess.department_id == user.department_id)
@@ -615,16 +616,19 @@ async def version_history(
     can_view = (doc.visibility != DocVisibility.restricted) or (level is not None)
     if not can_view:
         raise HTTPException(status_code=403, detail="Not permitted for your department")
+
+    # Join to pull uploader email for each version
     stmt = (
-        select(DocumentVersion)
+        select(DocumentVersion, AppUser.email.label("uploader_email"))
+        .join(AppUser, AppUser.user_id == DocumentVersion.uploaded_by)
         .where(DocumentVersion.doc_id == doc_id)
         .order_by(desc(DocumentVersion.version_no))
     )
-    rows = (await session.execute(stmt)).scalars().all()
+
+    rows = (await session.execute(stmt)).all()
     if not rows:
-        raise HTTPException(
-            status_code=404, detail="Document not found or no versions"
-        )
+        raise HTTPException(status_code=404, detail="Document not found or no versions")
+
     return [
         VersionOut(
             version_no=v.version_no,
@@ -633,8 +637,9 @@ async def version_history(
             uploaded_at=v.uploaded_at,
             uploaded_by=v.uploaded_by,
             is_latest=v.is_latest,
+            uploaded_by_email=email,  # 
         )
-        for v in rows
+        for (v, email) in rows
     ]
 @router.get("/{doc_id}/download")
 async def download(
@@ -690,7 +695,7 @@ async def download(
     # filename for disposition
     fname = v.storage_key.rsplit("/", 1)[-1] or f"doc-{doc_id}-v{v.version_no}"
 
-    # presigned URL
+# presigned URL (uses INTERNAL endpoint_url, e.g. http://minio:9000)
     s3 = get_s3_client()
     url = s3.generate_presigned_url(
         "get_object",
@@ -701,6 +706,21 @@ async def download(
         },
         ExpiresIn=300,
     )
+
+    # --- REWRITE to public base URL so the browser can access it ----
+    if settings.S3_PUBLIC_BASE_URL:
+        internal = urlparse(url)
+        public = urlparse(settings.S3_PUBLIC_BASE_URL)
+        # keep original path/query/signature; swap scheme+host[:port]
+        url = urlunparse((
+            public.scheme or internal.scheme,
+            public.netloc or internal.netloc,
+            internal.path,
+            internal.params,
+            internal.query,
+            internal.fragment,
+        ))
+    # ---------------------------------------------------------------
 
     # usage cache
     await r.setex(f"recent:doc:{doc_id}", 86400, v.storage_key)  # 24h

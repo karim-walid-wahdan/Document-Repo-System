@@ -1,38 +1,40 @@
-import { useEffect, useMemo, useState } from "react";
-import { Dialog, DialogTitle, DialogContent, DialogActions, Stack, LinearProgress, Alert, Typography, Table, TableHead, TableRow, TableCell, TableBody, FormControl, InputLabel, Select, MenuItem, Button } from "@mui/material";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Stack, LinearProgress, Alert, Button,
+  Table, TableHead, TableRow, TableCell, TableBody,
+  FormControl, Select, MenuItem, InputLabel, Typography
+} from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ShieldIcon from "@mui/icons-material/Shield";
-import { listDepartments } from "../../api/departments";
 
-const LEVELS = ["owner", "edit", "view"];
+const PERM_LEVELS = ["owner","edit","view"];
 
-export default function PermissionsDialog({ open, onClose, load, save }) {
-  // props:
-  //  - load(): Promise<{departments:[], rows:[]}>
-  //  - save(rows): Promise<void>
+export default function PermissionsDialog({ open, onClose, loadData, saveData }) {
+  // loadData: () => Promise<{ departments, rows }>
+  // saveData: (rows) => Promise<void>
   const [departments, setDepartments] = useState([]);
-  const [rows, setRows] = useState([]);
-  const [busy, setBusy] = useState(true);
+  const [rows, setRows] = useState([]); // [{department_id, level}]
+  const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let alive = true;
-    async function refresh() {
+    async function run() {
       setBusy(true); setError("");
       try {
-        const deps = await listDepartments();
-        const { rows: perms } = await load();
+        const { departments: deps, rows: r } = await loadData();
         if (!alive) return;
-        setDepartments(deps);
-        setRows(perms || []);
+        setDepartments(deps || []);
+        setRows(r || []);
       } catch (e) {
-        setError(e?.response?.data?.detail || "Failed to load permissions.");
+        setError(e?.message || "Failed to load permissions.");
       } finally { if (alive) setBusy(false); }
     }
-    if (open) refresh();
+    if (open) run();
     return () => { alive = false; };
-  }, [open, load]);
+  }, [open, loadData]);
 
   function upsert(depId, level) {
     setRows((prev) => {
@@ -42,13 +44,13 @@ export default function PermissionsDialog({ open, onClose, load, save }) {
     });
   }
 
-  async function onSave() {
+  async function save() {
     setSaving(true); setError("");
     try {
-      await save(rows);
+      await saveData(rows);
       onClose();
     } catch (e) {
-      setError(e?.response?.data?.detail || "Failed to save.");
+      setError(e?.message || "Failed to save permissions.");
     } finally { setSaving(false); }
   }
 
@@ -62,7 +64,7 @@ export default function PermissionsDialog({ open, onClose, load, save }) {
           {!busy && (
             <>
               <Typography variant="body2" color="text.secondary">
-                Set access per department. <b>owner</b> can manage ACL; <b>edit</b> can upload & edit; <b>view</b> can read.
+                Set access per department. <b>owner</b> can manage ACL; <b>edit</b> can add versions & edit metadata; <b>view</b> can read.
               </Typography>
               <Table size="small">
                 <TableHead>
@@ -89,7 +91,9 @@ export default function PermissionsDialog({ open, onClose, load, save }) {
                               onChange={(e) => upsert(d.department_id, e.target.value)}
                             >
                               <MenuItem value=""><em>none</em></MenuItem>
-                              {LEVELS.map((lv) => <MenuItem key={lv} value={lv}>{lv}</MenuItem>)}
+                              {PERM_LEVELS.map((lv) => (
+                                <MenuItem key={lv} value={lv}>{lv}</MenuItem>
+                              ))}
                             </Select>
                           </FormControl>
                         </TableCell>
@@ -104,7 +108,9 @@ export default function PermissionsDialog({ open, onClose, load, save }) {
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={saving} startIcon={<CloseIcon />}>Close</Button>
-        <Button onClick={onSave} disabled={saving || busy} variant="contained" startIcon={<ShieldIcon />}>Save</Button>
+        <Button onClick={save} disabled={saving || busy} variant="contained" startIcon={<ShieldIcon />}>
+          Save
+        </Button>
       </DialogActions>
     </Dialog>
   );

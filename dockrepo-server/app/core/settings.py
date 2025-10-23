@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     S3_REGION: str
     S3_ENDPOINT_URL: Optional[str] = None
     S3_BUCKET: str
+    S3_PUBLIC_BASE_URL: Optional[str] = None
 
     # ----- Database -----
     DATABASE_URL: str

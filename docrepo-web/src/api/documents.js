@@ -2,16 +2,23 @@ import api from "./client";
 
 
 
-export async function searchDocumentsAdvanced({ q, tags, uploaderId, limit = 25, offset = 0 }) {
-  const params = {};
-  if (q) params.q = q;
-  if (Array.isArray(tags) && tags.length) params.tags = tags;      // e.g. ['Finance','Legal']
-  if (uploaderId) params.uploader = uploaderId;
-  params.limit = limit; params.offset = offset;
-  const { data } = await api.get("/documents", { params });
+export async function searchDocumentsAdvanced(opts = {}) {
+  const { q, tags = [], uploader } = opts;
+
+  // Build query string with repeated params (?tags=a&tags=b)
+  const qs = new URLSearchParams();
+  if (q && q.trim()) qs.set("q", q.trim());
+  if (uploader != null && String(uploader).trim() !== "") {
+    qs.set("uploader", String(uploader));
+  }
+  if (Array.isArray(tags) && tags.length) {
+    tags.filter(Boolean).forEach((t) => qs.append("tags", t));
+  }
+
+  const url = qs.toString() ? `/documents?${qs.toString()}` : `/documents`;
+  const { data } = await api.get(url);
   return data;
 }
-
 export async function getDocumentDetails(docId) {
   const { data } = await api.get(`/documents/${docId}`);
   return data; 
